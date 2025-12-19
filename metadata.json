@@ -1,0 +1,8 @@
+{
+  "name": " FamCare ",
+  "description": "A comprehensive family care coordination and support platform powered by Gemini AI, featuring dashboarding, smart scheduling, health tracking, and an intelligent family assistant.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ]
+}
