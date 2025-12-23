@@ -1,26 +1,100 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
+import PregnancyCare from './components/PregnancyCare';
+import AIAssistant from './components/AIAssistant';
 import DoctorPortal from './components/DoctorPortal';
 import EmergencyDispatch from './components/EmergencyDispatch';
 import PatientMobileApp from './components/PatientMobileApp';
-import { ViewType, AppMode, Appointment } from './types';
-import { Truck, Sparkles, Key, ExternalLink, ShieldCheck, Clock, Calendar as CalendarIcon, CheckCircle2, XCircle } from 'lucide-react';
+import Settings from './components/Settings';
+import PatientList from './components/PatientList';
+import { ViewType, AppMode, Appointment, PatientRecord, Message, RiskLevel } from './types';
+// Added ArrowRight to fixed the "Cannot find name 'ArrowRight'" error on line 256
+import { Key, Loader2, Database, AlertCircle, X, Bell, ArrowRight } from 'lucide-react';
+import { apiService } from './services/apiService';
 
 const App: React.FC = () => {
   const [appMode, setAppMode] = useState<AppMode>('DOCTOR_DESKTOP');
-  const [activeView, setActiveView] = useState<ViewType>(ViewType.CLINIC_DASHBOARD);
+  const [activeView, setActiveView] = useState<ViewType>(ViewType.DASHBOARD);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dbConnected, setDbConnected] = useState(false);
   
-  // Global Shared State
-  const [appointments, setAppointments] = useState<Appointment[]>([
-    { id: '1', patientId: 'p1', patientName: 'Sarah Miller', date: '2024-10-28', time: '09:00 AM', reason: 'Routine Checkup', status: 'approved', timestamp: new Date() },
-    { id: '2', patientId: 'p2', patientName: 'Jane Cooper', date: '2024-10-28', time: '10:30 AM', reason: 'Emergency Monitoring', status: 'approved', timestamp: new Date() }
-  ]);
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  
+  // New state for cross-portal emergency notifications
+  const [activeAlert, setActiveAlert] = useState<{patientName: string, reason: string} | null>(null);
 
   useEffect(() => {
-    checkKeyStatus();
+    const initApp = async () => {
+      await checkKeyStatus();
+      await loadData();
+      setIsLoading(false);
+    };
+    initApp();
   }, []);
+
+  const loadData = async () => {
+    try {
+      const [fetchedPatients, fetchedAppointments] = await Promise.all([
+        apiService.fetchPatients(),
+        apiService.fetchAppointments()
+      ]);
+      setPatients(fetchedPatients);
+      setAppointments(fetchedAppointments);
+      setDbConnected(true);
+    } catch (err) {
+      console.error("Database connection failed. Check if api/main.py is running.");
+      setDbConnected(false);
+      // Fallback mock data with detailed Alice information
+      setPatients([
+        { 
+          id: 'p1', 
+          name: 'Mutoni Alice', 
+          age: 28,
+          bloodType: 'A+',
+          emergencyContact: 'Robert Mutoni (Husband) - +250 788 123 456',
+          allergies: ['Penicillin', 'Dust'],
+          weeks: 32, 
+          lastBp: '145/95', 
+          riskLevel: 'medium', 
+          location: { lat: -1.9441, lng: 30.0619 }, 
+          lastUpdate: 'Offline', 
+          triageHistory: [] 
+        },
+        { 
+          id: 'p2', 
+          name: 'Umuhoza Grace', 
+          age: 24,
+          bloodType: 'O-',
+          emergencyContact: 'Mama Grace - +250 788 987 654',
+          allergies: ['None'],
+          weeks: 24, 
+          lastBp: '118/72', 
+          riskLevel: 'low', 
+          location: { lat: -1.9706, lng: 30.1044 }, 
+          lastUpdate: '2 hours ago', 
+          triageHistory: [] 
+        },
+        { 
+          id: 'p3', 
+          name: 'Ingabire Marie', 
+          age: 34,
+          bloodType: 'B+',
+          emergencyContact: 'Jean Paul - +250 788 000 111',
+          allergies: ['Latex'],
+          weeks: 38, 
+          lastBp: '158/102', 
+          riskLevel: 'high', 
+          location: { lat: -1.9547, lng: 30.0822 }, 
+          lastUpdate: 'Just now', 
+          triageHistory: [] 
+        },
+      ]);
+    }
+  };
 
   const checkKeyStatus = async () => {
     if ((window as any).aistudio) {
@@ -38,8 +112,45 @@ const App: React.FC = () => {
     }
   };
 
-  const addAppointment = (apt: Appointment) => {
+  const updatePatientTriage = async (patientId: string, riskLevel: RiskLevel, newMessage: Message) => {
+    setPatients(prev => prev.map(p => {
+      if (p.id === patientId) {
+        // Trigger global alert if high risk
+        if (riskLevel === 'high') {
+          setActiveAlert({
+            patientName: p.name,
+            reason: newMessage.text.substring(0, 60) + "..."
+          });
+        }
+        
+        return {
+          ...p,
+          riskLevel,
+          lastUpdate: 'Just now',
+          triageHistory: [newMessage, ...p.triageHistory].slice(0, 10)
+        };
+      }
+      return p;
+    }));
+
+    if (dbConnected) {
+      try {
+        await apiService.updatePatientTriage(patientId, riskLevel, newMessage);
+      } catch (err) {
+        console.error("Database sync failed", err);
+      }
+    }
+  };
+
+  const addAppointment = async (apt: Appointment) => {
     setAppointments(prev => [apt, ...prev]);
+    if (dbConnected) {
+      try {
+        await apiService.createAppointment(apt);
+      } catch (err) {
+        console.error("Database sync failed", err);
+      }
+    }
   };
 
   const updateAppointmentStatus = (id: string, status: Appointment['status']) => {
@@ -48,30 +159,25 @@ const App: React.FC = () => {
 
   if (hasKey === false) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-slate-900 border border-white/10 p-10 rounded-[3rem] text-center shadow-2xl">
-          <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-indigo-900/40">
-            <Key size={40} className="text-white" />
-          </div>
-          <h1 className="text-3xl font-black text-white mb-4 tracking-tighter">Gemini 2.5/3 Setup</h1>
-          <p className="text-slate-400 text-sm mb-10 leading-relaxed font-medium">
-            To use FamCare's high-fidelity AI tracking, voice care, and Maps grounding, you must select a Gemini API key from a paid GCP project.
-          </p>
-          <div className="space-y-4">
-            <button 
-              onClick={handleOpenKeySelector}
-              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3"
-            >
-              <Sparkles size={20} /> CONNECT AI ENGINE
-            </button>
-            <a 
-              href="https://ai.google.dev/gemini-api/docs/billing" 
-              target="_blank" 
-              className="block text-[10px] text-slate-500 font-bold uppercase tracking-widest hover:text-indigo-400 transition-colors"
-            >
-              Billing Documentation <ExternalLink size={10} className="inline ml-1" />
-            </a>
-          </div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white">
+        <div className="max-w-md w-full bg-slate-900 border border-white/10 p-10 rounded-[2.5rem] text-center">
+          <Key size={48} className="mx-auto mb-6 text-rose-600" />
+          <h1 className="text-2xl font-black mb-4 tracking-tighter">AI Setup Required</h1>
+          <p className="text-slate-400 text-sm mb-8 leading-relaxed">Please connect your Gemini API key to activate the FamCare health engine.</p>
+          <button onClick={handleOpenKeySelector} className="w-full py-4 bg-rose-600 hover:bg-rose-500 rounded-2xl font-black transition-all">
+            CONNECT AI KEY
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+           <Loader2 className="animate-spin text-rose-600 mx-auto mb-4" size={40} />
+           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Establishing Database Handshake...</p>
         </div>
       </div>
     );
@@ -79,217 +185,45 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (appMode === 'PATIENT_MOBILE') {
+      const currentPatient = patients.find(p => p.id === 'p1') || patients[0];
       return (
         <PatientMobileApp 
           onExit={() => setAppMode('DOCTOR_DESKTOP')} 
           appointments={appointments}
           onBookAppointment={addAppointment}
+          patientRecord={currentPatient}
+          onTriageUpdate={(risk, msg) => updatePatientTriage(currentPatient.id, risk, msg)}
         />
       );
     }
 
     switch (activeView) {
-      case ViewType.CLINIC_DASHBOARD:
+      case ViewType.DASHBOARD:
         return <Dashboard appointments={appointments} />;
+      case ViewType.PATIENTS:
+        return <PatientList patients={patients} onSelectPatient={(p) => setActiveView(ViewType.DOCTOR_PORTAL)} />;
+      case ViewType.PREGNANCY_CARE:
+        return <PregnancyCare />;
+      case ViewType.AI_ASSISTANT:
+        return <AIAssistant />;
       case ViewType.DOCTOR_PORTAL:
         return (
           <DoctorPortal 
+            patients={patients}
             appointments={appointments} 
             onUpdateAptStatus={updateAppointmentStatus} 
+            onBack={() => setActiveView(ViewType.DASHBOARD)}
           />
         );
       case ViewType.EMERGENCY_DISPATCH:
-        return <EmergencyDispatch />;
-      case ViewType.CLINIC_SCHEDULE:
-        return (
-          <div className="flex flex-col xl:flex-row gap-6 h-[calc(100vh-180px)] animate-in fade-in duration-700">
-             <div className="flex-1 bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm overflow-y-auto custom-scrollbar">
-                <div className="flex items-center justify-between mb-8">
-                   <h3 className="text-4xl font-black text-slate-900 tracking-tighter">Clinic <span className="text-indigo-600">Schedule</span></h3>
-                   <div className="flex gap-4">
-                     <div className="flex bg-slate-100 p-1 rounded-xl">
-                        <button className="px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-900 transition-colors">Day</button>
-                        <button className="px-4 py-2 text-xs font-black uppercase tracking-widest bg-white text-indigo-600 rounded-lg shadow-sm">Month</button>
-                     </div>
-                   </div>
-                </div>
-
-                <div className="grid grid-cols-7 gap-4 mb-8">
-                   {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                     <div key={day} className="text-center text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2">{day}</div>
-                   ))}
-                   {Array.from({length: 31}).map((_, i) => {
-                     const dayAppointments = appointments.filter(a => new Date(a.date).getDate() === i + 1);
-                     const hasApproved = dayAppointments.some(a => a.status === 'approved');
-                     const hasPending = dayAppointments.some(a => a.status === 'pending');
-                     
-                     return (
-                       <div key={i} className={`aspect-square rounded-2xl flex flex-col items-center justify-center font-black transition-all cursor-pointer border ${
-                         hasApproved ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 
-                         hasPending ? 'bg-amber-50 border-amber-100 text-amber-600' :
-                         'bg-slate-50 border-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-600'
-                       } group relative`}>
-                         <span className="text-base">{i + 1}</span>
-                         <div className="absolute bottom-2 flex gap-1">
-                            {hasApproved && <div className="w-1 h-1 rounded-full bg-indigo-500"></div>}
-                            {hasPending && <div className="w-1 h-1 rounded-full bg-amber-500 animate-pulse"></div>}
-                         </div>
-                       </div>
-                     );
-                   })}
-                </div>
-                
-                <div className="space-y-6">
-                   <div>
-                     <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 mb-4">Agenda: Today</h4>
-                     <div className="space-y-3">
-                        {appointments
-                         .filter(a => a.status !== 'declined')
-                         .sort((a, b) => a.time.localeCompare(b.time))
-                         .map((apt) => (
-                          <div key={apt.id} className={`flex items-center justify-between p-5 rounded-3xl border transition-all ${
-                            apt.status === 'approved' 
-                              ? 'bg-slate-50 border-slate-100 shadow-sm' 
-                              : 'bg-amber-50 border-amber-100 shadow-none'
-                          }`}>
-                             <div className="flex items-center gap-5">
-                                <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-black ${
-                                  apt.status === 'approved' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
-                                }`}>
-                                   <Clock size={16} />
-                                   <span className="text-[10px] mt-1">{apt.time.split(' ')[0]}</span>
-                                </div>
-                                <div>
-                                   <p className="text-base font-black text-slate-800 tracking-tight">{apt.patientName}</p>
-                                   <p className="text-xs text-slate-500 font-medium flex items-center gap-1">
-                                      {apt.reason}
-                                   </p>
-                                </div>
-                             </div>
-                             <div className="flex items-center gap-4">
-                                {apt.status === 'pending' && (
-                                  <div className="flex gap-2">
-                                     <button 
-                                      onClick={() => updateAppointmentStatus(apt.id, 'approved')}
-                                      className="bg-white text-emerald-600 p-2 rounded-xl border border-emerald-100 hover:bg-emerald-50 shadow-sm"
-                                     >
-                                        <CheckCircle2 size={18} />
-                                     </button>
-                                     <button 
-                                      onClick={() => updateAppointmentStatus(apt.id, 'declined')}
-                                      className="bg-white text-rose-600 p-2 rounded-xl border border-rose-100 hover:bg-rose-50 shadow-sm"
-                                     >
-                                        <XCircle size={18} />
-                                     </button>
-                                  </div>
-                                )}
-                                <span className={`text-[10px] font-black uppercase px-3 py-1.5 rounded-full ${
-                                  apt.status === 'approved' ? 'bg-indigo-600 text-white' : 'bg-amber-500 text-white animate-pulse'
-                                }`}>
-                                   {apt.status}
-                                </span>
-                             </div>
-                          </div>
-                        ))}
-                     </div>
-                   </div>
-                </div>
-             </div>
-
-             <div className="w-full xl:w-[400px] flex flex-col gap-6">
-                <div className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm">
-                   <div className="flex items-center gap-3 mb-6">
-                      <div className="bg-amber-100 p-3 rounded-2xl text-amber-600">
-                        <Clock size={20} />
-                      </div>
-                      <h4 className="font-black text-slate-800 tracking-tighter uppercase text-sm tracking-widest">Awaiting Approval</h4>
-                   </div>
-                   <div className="space-y-4">
-                      {appointments.filter(a => a.status === 'pending').length > 0 ? (
-                        appointments.filter(a => a.status === 'pending').map(apt => (
-                          <div key={apt.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
-                             <p className="font-black text-slate-800 text-sm">{apt.patientName}</p>
-                             <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">{apt.date} @ {apt.time}</p>
-                             <div className="mt-4 flex gap-2">
-                                <button 
-                                  onClick={() => updateAppointmentStatus(apt.id, 'approved')}
-                                  className="flex-1 bg-white text-emerald-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-emerald-100 hover:bg-emerald-50"
-                                >
-                                  Confirm
-                                </button>
-                                <button 
-                                  onClick={() => updateAppointmentStatus(apt.id, 'declined')}
-                                  className="flex-1 bg-white text-rose-600 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-rose-100 hover:bg-rose-50"
-                                >
-                                  Reject
-                                </button>
-                             </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-center py-10 border-2 border-dashed border-slate-100 rounded-3xl">
-                           <ShieldCheck size={40} className="mx-auto text-slate-100 mb-2" />
-                           <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">No pending requests</p>
-                        </div>
-                      )}
-                   </div>
-                </div>
-
-                <div className="bg-slate-900 rounded-[2.5rem] overflow-hidden flex flex-col shadow-2xl flex-1 border border-white/5 relative">
-                   <div className="p-6 border-b border-white/10 flex items-center justify-between bg-slate-900 z-10">
-                      <div className="flex items-center gap-2">
-                         <div className="bg-rose-600 p-2 rounded-lg">
-                            <Truck size={16} className="text-white" />
-                         </div>
-                         <h4 className="text-white font-black text-sm uppercase tracking-tighter">Live Patient Trucking</h4>
-                      </div>
-                      <button onClick={() => setActiveView(ViewType.EMERGENCY_DISPATCH)} className="text-[10px] font-black text-indigo-400 uppercase hover:text-indigo-300">Expand Hub</button>
-                   </div>
-                   
-                   <div className="flex-1 relative bg-slate-950">
-                      <iframe
-                        width="100%"
-                        height="100%"
-                        style={{ border: 0 }}
-                        loading="lazy"
-                        allowFullScreen
-                        src={`https://maps.google.com/maps?q=34.0522,-118.2437&t=k&z=15&output=embed`}
-                        className="grayscale-[20%] contrast-[1.1] brightness-[0.7]"
-                      ></iframe>
-                   </div>
-                </div>
-             </div>
-          </div>
-        );
+        return <EmergencyDispatch patients={patients} />;
       case ViewType.SETTINGS:
         return (
-          <div className="max-w-3xl bg-white p-12 rounded-[2.5rem] border border-slate-200 shadow-sm animate-in fade-in duration-700">
-             <h3 className="text-3xl font-black text-slate-900 mb-10 tracking-tighter">Workspace <span className="text-indigo-600">Settings</span></h3>
-             <div className="space-y-6">
-                <button 
-                  onClick={handleOpenKeySelector}
-                  className="w-full flex items-center justify-between p-6 bg-indigo-50 rounded-3xl border border-indigo-100 hover:bg-indigo-100 transition-all"
-                >
-                  <div className="text-left">
-                    <span className="font-black text-indigo-900 block">Switch Gemini API Key</span>
-                    <span className="text-xs text-indigo-400 font-medium">Update the key used for Gemini 3 and 2.5 Flash models</span>
-                  </div>
-                  <ShieldCheck size={24} className="text-indigo-600" />
-                </button>
-                {[
-                  { title: 'General Clinic Info', desc: 'Managed branding, contact, and address details' },
-                  { title: 'Staff Management', desc: 'Control access for doctors, nurses, and admins' },
-                  { title: 'AI Threshold Tuning', desc: 'Adjust sensitivity for Gemini risk detection' }
-                ].map((item) => (
-                  <div key={item.title} className="flex items-center justify-between p-6 bg-slate-50 rounded-3xl hover:bg-slate-100 transition-all cursor-pointer group border border-transparent hover:border-slate-200">
-                    <div>
-                      <span className="font-black text-slate-800 group-hover:text-slate-900 block">{item.title}</span>
-                      <span className="text-xs text-slate-400 font-medium">{item.desc}</span>
-                    </div>
-                  </div>
-                ))}
-             </div>
-          </div>
+          <Settings 
+            dbConnected={dbConnected} 
+            onReconnect={loadData} 
+            onOpenKeySelector={handleOpenKeySelector} 
+          />
         );
       default:
         return <Dashboard appointments={appointments} />;
@@ -303,7 +237,36 @@ const App: React.FC = () => {
       appMode={appMode} 
       setAppMode={setAppMode}
     >
-      {renderContent()}
+      <div className="relative">
+        {/* Global Emergency Alert Notification (Doctor Portal) */}
+        {activeAlert && appMode === 'DOCTOR_DESKTOP' && (
+          <div className="fixed top-6 right-6 z-[100] animate-in slide-in-from-right-4 duration-500">
+             <div className="bg-rose-600 text-white p-6 rounded-[2rem] shadow-[0_20px_50px_rgba(225,29,72,0.4)] border border-rose-400 flex items-center gap-4 max-w-sm">
+                <div className="bg-white/20 p-3 rounded-2xl">
+                   <AlertCircle className="animate-pulse" size={24} />
+                </div>
+                <div className="flex-1">
+                   <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Urgent Medical Alert</p>
+                   <p className="text-sm font-black mt-0.5">{activeAlert.patientName}</p>
+                   <p className="text-[10px] opacity-70 mt-1 truncate">{activeAlert.reason}</p>
+                </div>
+                <button 
+                  onClick={() => { setActiveAlert(null); setActiveView(ViewType.DOCTOR_PORTAL); }}
+                  className="bg-white/10 p-2 rounded-xl hover:bg-white/20 transition-all"
+                >
+                   <ArrowRight size={18} />
+                </button>
+                <button 
+                  onClick={() => setActiveAlert(null)}
+                  className="absolute -top-2 -right-2 bg-slate-900 text-white p-1 rounded-full border border-white/20"
+                >
+                   <X size={12} />
+                </button>
+             </div>
+          </div>
+        )}
+        {renderContent()}
+      </div>
     </Layout>
   );
 };

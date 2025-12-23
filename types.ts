@@ -1,8 +1,11 @@
+
 export enum ViewType {
-  CLINIC_DASHBOARD = 'CLINIC_DASHBOARD',
+  DASHBOARD = 'DASHBOARD',
+  PATIENTS = 'PATIENTS',
+  PREGNANCY_CARE = 'PREGNANCY_CARE',
+  AI_ASSISTANT = 'AI_ASSISTANT',
   DOCTOR_PORTAL = 'DOCTOR_PORTAL',
   EMERGENCY_DISPATCH = 'EMERGENCY_DISPATCH',
-  CLINIC_SCHEDULE = 'CLINIC_SCHEDULE',
   SETTINGS = 'SETTINGS'
 }
 
@@ -37,6 +40,10 @@ export interface VitalLog {
 export interface PatientRecord {
   id: string;
   name: string;
+  age: number;
+  bloodType: string;
+  emergencyContact: string;
+  allergies: string[];
   weeks: number;
   lastBp: string;
   riskLevel: RiskLevel;

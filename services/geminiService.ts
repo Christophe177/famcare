@@ -1,15 +1,19 @@
-import { GoogleGenAI, Type, GenerateContentResponse, Modality } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse, Modality, FunctionDeclaration } from "@google/genai";
+import { 
+  CLINICAL_TRIAGE_PROMPT, 
+  FAMILY_ASSISTANT_PROMPT, 
+  GROUNDING_MAPS_PROMPT, 
+  LIVE_AUDIO_PROMPT, 
+  JOURNAL_ANALYSIS_PROMPT 
+} from "./prompts";
 
 export interface TriageResult {
   advice: string;
   riskLevel: 'low' | 'medium' | 'high';
   recommendedAction: string;
+  triggeredFunctions?: any[];
 }
 
-/**
- * Helper to handle key selection dialog. 
- * We don't re-throw here so the calling function can return a safe fallback.
- */
 const handleApiError = async (error: any) => {
   console.error("Gemini API Error:", error);
   if (error?.message?.includes("Requested entity was not found") || error?.message?.includes("API_KEY")) {
@@ -20,24 +24,25 @@ const handleApiError = async (error: any) => {
 };
 
 /**
- * Patient-facing risk assessment - using Gemini 3 Pro for complex reasoning
+ * Triage Logic: Utilizes Gemini 3 Pro for Complex Reasoning
+ * This ensures danger signs are correctly identified via the system instruction.
  */
-export const getPatientRiskAssessment = async (message: string, history: string): Promise<TriageResult> => {
+export const getPatientRiskAssessment = async (message: string, history: string, patientInfo?: string): Promise<TriageResult> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const prompt = `Conversation History: ${history}\n\nPatient Message: ${message}`;
+  const prompt = `[PATIENT PROFILE]\n${patientInfo}\n\n[HISTORY]\n${history}\n\n[USER INPUT]\n${message}`;
   
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-pro-preview', // Highest reasoning capability for medical safety
       contents: [{ parts: [{ text: prompt }] }],
       config: {
-        systemInstruction: `You are the FamCare Patient AI, powered by Gemini 3. Your primary job is to monitor pregnancy risk. Analyze symptoms and provide advice, riskLevel, and recommendedAction in JSON format.`,
+        systemInstruction: CLINICAL_TRIAGE_PROMPT,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             advice: { type: Type.STRING },
-            riskLevel: { type: Type.STRING }, // Use string to allow any value, though we aim for enum
+            riskLevel: { type: Type.STRING, enum: ['low', 'medium', 'high'] },
             recommendedAction: { type: Type.STRING }
           },
           required: ["advice", "riskLevel", "recommendedAction"]
@@ -45,20 +50,19 @@ export const getPatientRiskAssessment = async (message: string, history: string)
       },
     });
     
-    const text = response.text || '{}';
-    return JSON.parse(text) as TriageResult;
+    return JSON.parse(response.text || '{}');
   } catch (error) {
     await handleApiError(error);
     return {
-      advice: "I'm having trouble analyzing your symptoms right now. Please rest and contact your OBGYN immediately if you are concerned.",
+      advice: "I'm having trouble analyzing your symptoms. If you feel unwell, please contact your local health center immediately.",
       riskLevel: 'medium',
-      recommendedAction: "Please contact your healthcare provider for a manual check-up."
+      recommendedAction: "Seek immediate medical consultation."
     };
   }
 };
 
 /**
- * General family advice - using Gemini 3 Flash
+ * Assistant Logic: Utilizes Gemini 3 Flash for fast, conversational support.
  */
 export const getFamilyAdvice = async (message: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -67,83 +71,42 @@ export const getFamilyAdvice = async (message: string): Promise<string> => {
       model: 'gemini-3-flash-preview',
       contents: [{ parts: [{ text: message }] }],
       config: {
-        systemInstruction: "You are the FamCare General Assistant. Help families with organization and general parenting tips.",
+        systemInstruction: FAMILY_ASSISTANT_PROMPT,
       }
     });
-    return response.text || "I'm sorry, I couldn't process that request.";
+    return response.text || "I'm sorry, I'm resting my circuits. Try again soon!";
   } catch (error) {
     await handleApiError(error);
-    return "I'm having trouble connecting right now. Please try again in a moment.";
+    return "Umuseke is currently offline.";
   }
 };
 
 /**
- * Emergency hospital discovery using Google Maps Grounding
+ * Hospital Grounding: Uses Gemini 2.5 Flash as it's the only model supporting Maps tool.
  */
 export const trackEmergencyLocation = async (patientName: string, lat: number, lng: number): Promise<{ text: string; links: any[] }> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [{ parts: [{ text: `Identify the nearest hospitals with Level III or IV NICU for patient ${patientName} at [${lat}, ${lng}]. Provide direct navigation URIs.` }] }],
+      model: "gemini-2.5-flash", // Required for tool support
+      contents: [{ parts: [{ text: `Find hospitals near patient ${patientName} at [${lat}, ${lng}].` }] }],
       config: {
+        systemInstruction: GROUNDING_MAPS_PROMPT,
         tools: [{ googleMaps: {} }],
-        toolConfig: {
-          retrievalConfig: {
-            latLng: {
-              latitude: lat,
-              longitude: lng
-            }
-          }
-        }
+        toolConfig: { retrievalConfig: { latLng: { latitude: lat, longitude: lng } } }
       },
     });
-
     const links = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-    return {
-      text: response.text || "Analyzing medical infrastructure nearby...",
-      links: links
-    };
+    return { text: response.text || "Scanning Rwandan health grid...", links: links };
   } catch (error) {
     await handleApiError(error);
-    return { text: "Error locating nearby hospitals via Satellite Link.", links: [] };
+    return { text: "Location services unavailable.", links: [] };
   }
 }
 
-export interface JournalAnalysis {
-  sentiment: string;
-  summary: string;
-  recommendations: string[];
-}
-
-export const analyzeJournalEntry = async (content: string): Promise<JournalAnalysis> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [{ parts: [{ text: content }] }],
-      config: {
-        systemInstruction: "Analyze journal entry for mood, summary, and recommendations.",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            sentiment: { type: Type.STRING },
-            summary: { type: Type.STRING },
-            recommendations: { type: Type.ARRAY, items: { type: Type.STRING } }
-          },
-          required: ["sentiment", "summary", "recommendations"]
-        }
-      }
-    });
-    const text = response.text || '{}';
-    return JSON.parse(text) as JournalAnalysis;
-  } catch (error) {
-    await handleApiError(error);
-    return { sentiment: "Neutral", summary: "Entry recorded safely.", recommendations: ["Consider reflecting on this entry later today."] };
-  }
-};
-
+/**
+ * Live Audio: Native multimodal stream.
+ */
 export const connectToLiveCare = (callbacks: any) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   return ai.live.connect({
@@ -154,9 +117,39 @@ export const connectToLiveCare = (callbacks: any) => {
       speechConfig: {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
       },
-      systemInstruction: 'You are an empathetic medical assistant for pregnant women. Listen carefully and provide comfort and health guidance.',
+      systemInstruction: LIVE_AUDIO_PROMPT,
     },
   });
+};
+
+/**
+ * Journal NLP: Gemini 3 Flash for efficient feature extraction.
+ */
+export const analyzeJournalEntry = async (entry: string) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: [{ parts: [{ text: entry }] }],
+      config: {
+        systemInstruction: JOURNAL_ANALYSIS_PROMPT,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            sentiment: { type: Type.STRING },
+            summary: { type: Type.STRING },
+            recommendations: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: ["sentiment", "summary", "recommendations"]
+        }
+      },
+    });
+    return JSON.parse(response.text || '{}');
+  } catch (error) {
+    await handleApiError(error);
+    return { sentiment: "Neutral", summary: "Analysis failed.", recommendations: [] };
+  }
 };
 
 export function encodeAudio(bytes: Uint8Array) {

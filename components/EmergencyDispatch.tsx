@@ -20,14 +20,14 @@ import {
 import { trackEmergencyLocation } from '../services/geminiService';
 import { PatientRecord } from '../types';
 
-const EmergencyDispatch: React.FC = () => {
-  const [patients, setPatients] = useState<PatientRecord[]>([
-    { id: '1', name: 'Jane Cooper', weeks: 32, lastBp: '145/95', riskLevel: 'high', location: { lat: 34.0522, lng: -118.2437 }, lastUpdate: '10 mins ago', triageHistory: [] },
-    { id: '3', name: 'Emily Davis', weeks: 35, lastBp: '138/88', riskLevel: 'medium', location: { lat: 34.0736, lng: -118.4004 }, lastUpdate: '1 hour ago', triageHistory: [] },
-    { id: '4', name: 'Sofia Rodriguez', weeks: 38, lastBp: '150/100', riskLevel: 'high', location: { lat: 33.9416, lng: -118.4085 }, lastUpdate: 'Just now', triageHistory: [] }
-  ]);
+// Defined props interface to fix TypeScript error in App.tsx
+interface EmergencyDispatchProps {
+  patients: PatientRecord[];
+}
 
-  const [activePatient, setActivePatient] = useState<PatientRecord | null>(patients.find(p => p.riskLevel === 'high') || null);
+// Updated component to accept patients as a prop from the main App state
+const EmergencyDispatch: React.FC<EmergencyDispatchProps> = ({ patients }) => {
+  const [activePatient, setActivePatient] = useState<PatientRecord | null>(patients.find(p => p.riskLevel === 'high') || patients[0] || null);
   const [mapResult, setMapResult] = useState<{ text: string; links: any[] } | null>(null);
   const [isTracking, setIsTracking] = useState(false);
   const [isLiveSimulating, setIsLiveSimulating] = useState(false);
@@ -245,7 +245,7 @@ const EmergencyDispatch: React.FC = () => {
                           </div>
                           <div className="text-left">
                              <p className="text-sm font-black text-slate-800">{p.name}</p>
-                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">34.05N • 118.24W</p>
+                             <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{p.location.lat.toFixed(4)}N • {p.location.lng.toFixed(4)}E</p>
                           </div>
                        </div>
                        <div className="flex items-center gap-2">

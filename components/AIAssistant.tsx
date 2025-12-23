@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, Loader2, HeartPulse, AlertCircle } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Loader2, HeartPulse, AlertCircle, MessageSquare } from 'lucide-react';
 import { getPatientRiskAssessment, getFamilyAdvice } from '../services/geminiService';
 import { Message } from '../types';
 
 const AIAssistant: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', text: 'Hello! I am your FamCare AI Health Assistant. I am here to support you during your pregnancy journey. How are you feeling today?', timestamp: new Date() }
+    { role: 'model', text: 'Muraho! I am your FamCare AI Assistant. Switch to "Health Mode" for medical triage or stay in "General Mode" for family organization. How can I help you today?', timestamp: new Date() }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -18,10 +18,11 @@ const AIAssistant: React.FC = () => {
     }
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const handleSend = async (customText?: string) => {
+    const textToSend = customText || input;
+    if (!textToSend.trim() || isLoading) return;
 
-    const userMsg: Message = { role: 'user', text: input, timestamp: new Date() };
+    const userMsg: Message = { role: 'user', text: textToSend, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsLoading(true);
@@ -30,10 +31,10 @@ const AIAssistant: React.FC = () => {
       let responseText: string;
       if (mode === 'medical') {
         const history = messages.slice(-5).map(m => `${m.role}: ${m.text}`).join('\n');
-        const result = await getPatientRiskAssessment(input, history);
+        const result = await getPatientRiskAssessment(textToSend, history);
         responseText = result.advice;
       } else {
-        responseText = await getFamilyAdvice(input);
+        responseText = await getFamilyAdvice(textToSend);
       }
       
       setMessages(prev => [...prev, { 
@@ -53,102 +54,123 @@ const AIAssistant: React.FC = () => {
     }
   };
 
+  const suggestions = mode === 'medical' 
+    ? [
+        { label: "Check Vision Changes", text: "I have blurry vision and a bad headache." },
+        { label: "Kick Count Guide", text: "How many kicks should I feel at 32 weeks?" },
+        { label: "Swelling Check", text: "My feet are very swollen today." }
+      ]
+    : [
+        { label: "Diet Advice", text: "What are healthy local Rwandan foods for pregnancy?" },
+        { label: "Family Calendar", text: "Help me organize a family vaccination schedule." },
+        { label: "Parenting Tip", text: "How do I manage stress as a new parent?" }
+      ];
+
   return (
-    <div className="max-w-4xl mx-auto h-[calc(100vh-12rem)] flex flex-col bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-      <div className="p-4 border-b border-slate-100 bg-white flex items-center justify-between">
+    <div className="max-w-4xl mx-auto h-[calc(100vh-12rem)] flex flex-col bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+      <div className="p-6 border-b border-slate-100 bg-white flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className={`${mode === 'medical' ? 'bg-rose-600' : 'bg-indigo-600'} p-2 rounded-lg transition-colors`}>
+          <div className={`${mode === 'medical' ? 'bg-rose-600 shadow-rose-100' : 'bg-indigo-600 shadow-indigo-100'} p-3 rounded-2xl shadow-lg transition-colors`}>
             {mode === 'medical' ? <HeartPulse size={20} className="text-white" /> : <Bot size={20} className="text-white" />}
           </div>
           <div>
-            <h3 className="font-bold text-slate-800">
-              {mode === 'medical' ? 'Patient Health Support' : 'FamCare Assistant'}
+            <h3 className="font-black text-slate-800 tracking-tight">
+              {mode === 'medical' ? 'Clinical Triage Engine' : 'Family Companion AI'}
             </h3>
-            <p className="text-xs text-slate-500 flex items-center gap-1">
-              <Sparkles size={10} className="text-indigo-500" /> AI Engine Active
+            <p className="text-[10px] font-black text-slate-400 flex items-center gap-1 uppercase tracking-widest">
+              <Sparkles size={10} className="text-indigo-500" /> Powered by Gemini 3 Pro
             </p>
           </div>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-lg">
+        <div className="flex bg-slate-100 p-1.5 rounded-2xl">
           <button 
             onClick={() => setMode('medical')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'medical' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}
+            className={`px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${mode === 'medical' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-400'}`}
           >
-            Health Mode
+            Health
           </button>
           <button 
             onClick={() => setMode('general')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'general' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
+            className={`px-5 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${mode === 'general' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}
           >
             General
           </button>
         </div>
       </div>
 
-      <div className="bg-rose-50 px-4 py-2 flex items-center gap-2 border-b border-rose-100">
+      <div className="bg-rose-50 px-6 py-2 flex items-center gap-2 border-b border-rose-100">
         <AlertCircle size={14} className="text-rose-600" />
-        <p className="text-[10px] text-rose-700 font-medium uppercase tracking-wider">
-          AI is for support only. In emergencies, call 911 or your OBGYN immediately.
+        <p className="text-[9px] text-rose-700 font-black uppercase tracking-widest">
+          AI Monitoring Active • Not a substitute for professional medical care
         </p>
       </div>
 
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
+        className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar bg-slate-50/30"
       >
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                msg.role === 'user' ? 'bg-slate-200' : (mode === 'medical' ? 'bg-rose-100 text-rose-600' : 'bg-indigo-100 text-indigo-600')
+            <div className={`flex gap-4 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+                msg.role === 'user' ? 'bg-slate-900 text-white' : (mode === 'medical' ? 'bg-white text-rose-600 border border-rose-100' : 'bg-white text-indigo-600 border border-indigo-100')
               }`}>
-                {msg.role === 'user' ? <User size={16} /> : (mode === 'medical' ? <HeartPulse size={16} /> : <Bot size={16} />)}
+                {msg.role === 'user' ? <User size={18} /> : (mode === 'medical' ? <HeartPulse size={18} /> : <Bot size={18} />)}
               </div>
-              <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
+              <div className={`p-5 rounded-[2rem] text-sm leading-relaxed shadow-sm ${
                 msg.role === 'user' 
-                  ? 'bg-slate-800 text-white rounded-tr-none shadow-indigo-100/50 shadow-lg' 
-                  : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
+                  ? 'bg-indigo-600 text-white rounded-tr-none shadow-indigo-100' 
+                  : 'bg-white text-slate-800 rounded-tl-none border border-slate-200'
               }`}>
                 {msg.text}
+                <p className="text-[8px] font-black opacity-50 mt-3 uppercase tracking-widest">
+                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
               </div>
             </div>
           </div>
         ))}
         {isLoading && (
-          <div className="flex justify-start">
-            <div className="flex gap-3 items-center">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${mode === 'medical' ? 'bg-rose-100' : 'bg-indigo-100'}`}>
-                <Loader2 size={16} className={`${mode === 'medical' ? 'text-rose-600' : 'text-indigo-600'} animate-spin`} />
+          <div className="flex justify-start animate-pulse">
+            <div className="flex gap-4 items-center">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center bg-white border border-slate-100 shadow-sm`}>
+                <Loader2 size={18} className="text-indigo-600 animate-spin" />
               </div>
-              <div className="bg-slate-50 px-4 py-2 rounded-xl text-sm text-slate-400 italic">
-                {mode === 'medical' ? 'Analyzing medical context...' : 'Thinking...'}
+              <div className="bg-white border border-slate-100 px-6 py-3 rounded-[1.5rem] text-xs text-slate-400 font-black uppercase tracking-widest">
+                Gemini Reasoning...
               </div>
             </div>
           </div>
         )}
       </div>
 
-      <div className="p-4 bg-white border-t border-slate-100">
-        <div className="flex flex-wrap gap-2 mb-3">
-          <button onClick={() => setInput("I have a severe headache")} className="px-3 py-1 bg-slate-50 text-slate-600 text-[10px] font-bold rounded-full border border-slate-200 hover:border-rose-300 transition-colors">Headache</button>
-          <button onClick={() => setInput("Swelling in my ankles")} className="px-3 py-1 bg-slate-50 text-slate-600 text-[10px] font-bold rounded-full border border-slate-200 hover:border-rose-300 transition-colors">Swelling</button>
-          <button onClick={() => setInput("Decreased baby movement")} className="px-3 py-1 bg-slate-50 text-slate-600 text-[10px] font-bold rounded-full border border-slate-200 hover:border-rose-300 transition-colors">Kick Count</button>
+      <div className="p-6 bg-white border-t border-slate-100">
+        <div className="flex flex-wrap gap-2 mb-4">
+          {suggestions.map((s, i) => (
+            <button 
+              key={i}
+              onClick={() => handleSend(s.text)}
+              className="px-4 py-2 bg-slate-50 text-slate-600 text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all flex items-center gap-2"
+            >
+              <MessageSquare size={12} /> {s.label}
+            </button>
+          ))}
         </div>
-        <div className="relative flex items-center gap-2">
+        <div className="relative flex items-center gap-3">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder={mode === 'medical' ? "Describe your symptoms or ask a health question..." : "Ask anything about family management..."}
-            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+            placeholder={mode === 'medical' ? "Report symptoms (e.g., headache, vision)..." : "Ask about parenting or organization..."}
+            className="flex-1 bg-slate-100 border-2 border-transparent rounded-[1.5rem] px-6 py-4 text-sm font-bold text-slate-900 focus:outline-none focus:ring-0 focus:border-indigo-500 focus:bg-white transition-all shadow-inner"
           />
           <button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={isLoading || !input.trim()}
-            className={`${mode === 'medical' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'} text-white p-3 rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed`}
+            className={`${mode === 'medical' ? 'bg-rose-600 shadow-rose-200' : 'bg-indigo-600 shadow-indigo-200'} text-white p-4 rounded-2xl transition-all shadow-xl active:scale-90 disabled:opacity-30 disabled:grayscale`}
           >
-            <Send size={20} />
+            <Send size={24} />
           </button>
         </div>
       </div>

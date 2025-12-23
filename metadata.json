@@ -1,6 +1,6 @@
 {
-  "name": " FamCare ",
-  "description": "A comprehensive family care coordination and support platform powered by Gemini AI, featuring dashboarding, smart scheduling, health tracking, and an intelligent family assistant.",
+  "name": " FamCare hackthon",
+  "description": "A comprehensive family care coordination and support platform powered by Gemini AI, featuring dashboarding, smart scheduling, health tracking, and an intelligent family assistant.\nTo optimize the FamCare intelligence layer, I have designed a distributed prompting architecture. This approach separates \"Reasoning\" (complex medical triage) from \"Retrieval\" (hospital grounding) and \"Empathy\" (voice interaction).\nThe AI Distribution Strategy:\nThe Clinical Triage (Gemini 3 Pro): Uses a \"Safety-First\" reasoning chain. It is instructed to look for specific \"Danger Signs\" of pregnancy complications common in maternal health (Preeclampsia, Preterm labor).\nThe Grounding Hub (Gemini 2.5 Flash): Specifically tuned for the Google Maps tool. It acts as a bridge between the patient's GPS coordinates and the Rwandan Ministry of Health facility network.\nThe Empathy Engine (Gemini 2.5 Flash Native Audio): Designed for the Live API to provide low-latency, soothing vocal support during high-stress medical moments.\nThe Journal Analyst (Gemini 3 Flash): Performs sentiment analysis and extracts milestones from raw text to populate the family dashboard.",
   "requestFramePermissions": [
     "microphone",
     "geolocation"
